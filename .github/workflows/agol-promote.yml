@@ -58,6 +58,7 @@ jobs:
         env:
           AGOL_URL: ${{ secrets.AGOL_URL }}
           AGOL_CLIENT_ID: ${{ secrets.AGOL_CLIENT_ID }}
+          AGOL_CLIENT_SECRET: ${{ secrets.AGOL_CLIENT_SECRET }}
           AGOL_REFRESH_TOKEN: ${{ secrets.AGOL_REFRESH_TOKEN }}
           # Optional named user (if not using OAuth):
           # AGOL_USERNAME: ${{ secrets.AGOL_USERNAME }}

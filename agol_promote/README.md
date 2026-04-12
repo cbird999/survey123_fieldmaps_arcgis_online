@@ -44,7 +44,9 @@ python promote.py --project vegqc --from CERT --to TEST --replace
 
 ### Authentication
 
-Same as before: `AGOL_PROFILE` / `--profile`, or `AGOL_CLIENT_ID`+`AGOL_REFRESH_TOKEN`, or `AGOL_USERNAME`+`AGOL_PASSWORD`, optional `AGOL_URL`.
+- `AGOL_PROFILE` / `--profile`, or
+- **`AGOL_CLIENT_ID` + `AGOL_REFRESH_TOKEN`**, and for **CI / SAML / confidential apps** usually **`AGOL_CLIENT_SECRET`**, or
+- `AGOL_USERNAME` + `AGOL_PASSWORD`, optional `AGOL_URL`.
 
 ### Legacy wrapper
 
@@ -58,9 +60,20 @@ Workflow: **Actions → AGOL promote → Run workflow**.
    - **`agol-promote`**: used for runs where `to_env` is not `PROD` (e.g. CERT, TEST).
    - **`agol-prod`**: used when `to_env` is `PROD` — add **required reviewers** here.
 
-2. Add secrets to those environments (or organization secrets), e.g.:
+2. Add **repository** secrets (recommended), e.g.:
    - `AGOL_CLIENT_ID`, `AGOL_REFRESH_TOKEN`
+   - **`AGOL_CLIENT_SECRET`** — required for many **confidential** OAuth apps and **SAML** orgs so the Python API can refresh tokens **without** opening a browser (GitHub Actions has no interactive login).
    - Optional `AGOL_URL` if not `https://www.arcgis.com`
+
+### CI / OAuth troubleshooting
+
+If the workflow logs show **“paste the code”**, **SAML**, **Opening web browser**, or **`termios` / `getpass` errors**, the ArcGIS API fell back to **interactive** login. Fix:
+
+1. Add secret **`AGOL_CLIENT_SECRET`** (same value as in your AGOL OAuth app).
+2. Regenerate **`AGOL_REFRESH_TOKEN`** using the authorization-code flow (with `client_secret` in the token POST) so the token matches your app.
+3. Ensure secret values have **no extra spaces or newlines** (re-paste if unsure).
+
+Without **`client_secret`**, headless refresh often fails for confidential apps, and the library tries browser/SAML login, which **cannot** work on `ubuntu-latest`.
 
 3. The workflow defaults **`dry_run: true`** so the first run is safe; uncheck **dry_run** when you want a real clone.
 

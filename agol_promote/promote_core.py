@@ -118,25 +118,40 @@ def _connect_gis(profile: str | None, url: str) -> Any:
 
     from arcgis.gis import GIS
 
-    prof = profile or os.environ.get("AGOL_PROFILE")
+    prof = (profile or os.environ.get("AGOL_PROFILE") or "").strip() or None
     if prof:
         logger.info("Connecting with ArcGIS profile: %s", prof)
         return GIS(profile=prof)
 
-    cid = os.environ.get("AGOL_CLIENT_ID")
-    rt = os.environ.get("AGOL_REFRESH_TOKEN")
+    cid = (os.environ.get("AGOL_CLIENT_ID") or "").strip()
+    rt = (os.environ.get("AGOL_REFRESH_TOKEN") or "").strip()
+    csec = (os.environ.get("AGOL_CLIENT_SECRET") or "").strip() or None
+
     if cid and rt:
         logger.info("Connecting with OAuth (client_id + refresh_token)")
-        return GIS(url, client_id=cid, refresh_token=rt)
+        if os.environ.get("GITHUB_ACTIONS") == "true" and not csec:
+            logger.warning(
+                "AGOL_CLIENT_SECRET is not set. SAML / confidential OAuth apps often need it "
+                "for non-interactive token refresh in CI; without it the API may fall back to "
+                "browser login (which fails on GitHub runners). Add secret AGOL_CLIENT_SECRET."
+            )
+        gis_kw: dict[str, Any] = {"client_id": cid, "refresh_token": rt}
+        if csec:
+            gis_kw["client_secret"] = csec
+            logger.info("Using client_secret for OAuth token exchange")
+        return GIS(url, **gis_kw)
 
-    user = os.environ.get("AGOL_USERNAME")
+    user = (os.environ.get("AGOL_USERNAME") or "").strip()
     pw = os.environ.get("AGOL_PASSWORD")
-    if user and pw is not None:
+    if pw is not None:
+        pw = pw.strip()
+    if user and pw is not None and pw != "":
         logger.info("Connecting as named user: %s", user)
         return GIS(url, user, pw)
 
     raise ValueError(
-        "No credentials: set AGOL_PROFILE, or AGOL_CLIENT_ID+AGOL_REFRESH_TOKEN, "
+        "No credentials: set AGOL_PROFILE, or AGOL_CLIENT_ID+AGOL_REFRESH_TOKEN "
+        "(and usually AGOL_CLIENT_SECRET for CI), "
         "or AGOL_USERNAME+AGOL_PASSWORD (optional: --profile, AGOL_URL)."
     )
 
