@@ -63,7 +63,8 @@ Workflow: **Actions → AGOL promote → Run workflow**.
 2. Add **repository** secrets (recommended), e.g.:
    - `AGOL_CLIENT_ID`, `AGOL_REFRESH_TOKEN`
    - **`AGOL_CLIENT_SECRET`** — required for many **confidential** OAuth apps and **SAML** orgs so the Python API can refresh tokens **without** opening a browser (GitHub Actions has no interactive login).
-   - Optional `AGOL_URL` if not `https://www.arcgis.com`
+   - Optional **`AGOL_CONTENT_OWNER`** — ArcGIS **username** if `gis.users.me` is `None` in CI (see troubleshooting below).
+   - Optional `AGOL_URL` — prefer `https://YOURORG.maps.arcgis.com` when `www.arcgis.com` leaves `users.me` unset.
 
 ### CI / OAuth troubleshooting
 
@@ -74,6 +75,12 @@ If the workflow logs show **“paste the code”**, **SAML**, **Opening web brow
 3. Ensure secret values have **no extra spaces or newlines** (re-paste if unsure).
 
 Without **`client_secret`**, headless refresh often fails for confidential apps, and the library tries browser/SAML login, which **cannot** work on `ubuntu-latest`.
+
+If you see **`gis.users.me is None`** / **`AttributeError: 'NoneType'... username`**:
+
+- Set **`AGOL_URL`** to your **organization** host, e.g. `https://YOURORG.maps.arcgis.com` (not only `https://www.arcgis.com` for some orgs).
+- Add **`AGOL_CONTENT_OWNER`** with the **ArcGIS username** of the account that owns the OAuth token (often `user@ORG` or `org_username`).
+- Regenerate the refresh token using the **same** portal base URL you put in **`AGOL_URL`**.
 
 3. The workflow defaults **`dry_run: true`** so the first run is safe; uncheck **dry_run** when you want a real clone.
 

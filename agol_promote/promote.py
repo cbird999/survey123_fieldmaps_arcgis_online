@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Config not found: %s", cfg)
         return 2
 
-    url = args.url or os.environ.get("AGOL_URL") or "https://www.arcgis.com"
+    url = (args.url or os.environ.get("AGOL_URL") or "https://www.arcgis.com").strip() or "https://www.arcgis.com"
 
     try:
         run_promotion(

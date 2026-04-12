@@ -118,6 +118,8 @@ def _connect_gis(profile: str | None, url: str) -> Any:
 
     from arcgis.gis import GIS
 
+    url = (url or "").strip() or "https://www.arcgis.com"
+
     prof = (profile or os.environ.get("AGOL_PROFILE") or "").strip() or None
     if prof:
         logger.info("Connecting with ArcGIS profile: %s", prof)
@@ -153,6 +155,67 @@ def _connect_gis(profile: str | None, url: str) -> Any:
         "No credentials: set AGOL_PROFILE, or AGOL_CLIENT_ID+AGOL_REFRESH_TOKEN "
         "(and usually AGOL_CLIENT_SECRET for CI), "
         "or AGOL_USERNAME+AGOL_PASSWORD (optional: --profile, AGOL_URL)."
+    )
+
+
+def _username_from_portal_properties(gis: Any) -> str | None:
+    """Fallback when gis.users.me is None (org URL / OAuth timing / API version quirks)."""
+    import json
+
+    try:
+        p = gis.properties
+    except Exception as ex:
+        logger.debug("gis.properties failed: %s", ex)
+        return None
+    try:
+        user = p.get("user") if hasattr(p, "get") else getattr(p, "user", None)
+        if user is None:
+            return None
+        if isinstance(user, str):
+            obj = json.loads(user)
+            return obj.get("username") if isinstance(obj, dict) else None
+        if isinstance(user, dict):
+            return user.get("username")
+        return getattr(user, "username", None)
+    except Exception as ex:
+        logger.debug("Could not parse user from portal properties: %s", ex)
+        return None
+
+
+def _resolve_owner_username(gis: Any, content_owner: str | None) -> str:
+    import os
+
+    if content_owner and str(content_owner).strip():
+        return str(content_owner).strip()
+
+    me = None
+    try:
+        me = gis.users.me
+    except Exception as ex:
+        logger.debug("gis.users.me raised: %s", ex)
+    if me is not None:
+        return me.username
+
+    from_props = _username_from_portal_properties(gis)
+    if from_props:
+        logger.info("Resolved username from portal properties: %s", from_props)
+        return from_props
+
+    env_owner = (os.environ.get("AGOL_CONTENT_OWNER") or "").strip()
+    if env_owner:
+        logger.warning(
+            "gis.users.me is None; using AGOL_CONTENT_OWNER=%s",
+            env_owner,
+        )
+        return env_owner
+
+    raise RuntimeError(
+        "Cannot determine ArcGIS username: gis.users.me is None. "
+        "Fix: (1) Set secret AGOL_URL to your org root, e.g. https://YOURORG.maps.arcgis.com "
+        "(many SAML orgs need this instead of https://www.arcgis.com). "
+        "(2) Add repository secret AGOL_CONTENT_OWNER with the promoting user's username. "
+        "(3) Regenerate AGOL_REFRESH_TOKEN using the same portal URL as AGOL_URL. "
+        "Or pass --content-owner USER on the CLI."
     )
 
 
@@ -333,12 +396,10 @@ def run_promotion(
     source_titles = [item_title(project, fe, s) for s in ordered_specs]
     target_titles = [item_title(project, te, s) for s in ordered_specs]
 
+    url = (url or "").strip() or "https://www.arcgis.com"
     gis = _connect_gis(profile, url)
-    me = gis.users.me
-    logger.info("Signed in as %s", me.username)
-    owner = content_owner or me.username
-    if content_owner:
-        logger.info("Content owner: %s", owner)
+    owner = _resolve_owner_username(gis, content_owner)
+    logger.info("Using content owner (folder/items user): %s", owner)
 
     user = gis.users.get(owner)
 
