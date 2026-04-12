@@ -1,0 +1,30 @@
+# Linear promotion order: each hop must be exactly the next stage (DEV→CERT→TEST→PROD).
+promotion_chain:
+  - DEV
+  - CERT
+  - TEST
+  - PROD
+
+# project key = CLI --project slug (lowercase recommended).
+# title_prefix + env + title_suffix = item title (e.g. VegQC + DEV + _FL → VegQC_DEV_FL).
+# folder_pattern: placeholders {prefix}, {env}
+# items: order should list all feature_service entries before web_map for stable clone_items behavior.
+projects:
+  vegqc:
+    title_prefix: VegQC
+    folder_pattern: "{prefix}_{env}"
+    items:
+      - kind: feature_service
+        title_suffix: "_FL"
+      - kind: web_map
+        title_suffix: "_WM"
+
+  # Example second program (uncomment and adjust when ready):
+  # linepatrol:
+  #   title_prefix: LinePatrol
+  #   folder_pattern: "{prefix}_{env}"
+  #   items:
+  #     - kind: feature_service
+  #       title_suffix: "_FL"
+  #     - kind: web_map
+  #       title_suffix: "_WM"

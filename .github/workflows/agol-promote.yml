@@ -1,0 +1,71 @@
+# Manual promotion: DEV→CERT→TEST→PROD (one hop per run). Configure projects in agol_promote/projects.yaml.
+name: AGOL promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: Project slug from projects.yaml (e.g. vegqc)
+        required: true
+        type: string
+      from_env:
+        description: Source environment
+        required: true
+        type: choice
+        options:
+          - DEV
+          - CERT
+          - TEST
+      to_env:
+        description: Target environment (must be next in chain unless nonlinear)
+        required: true
+        type: choice
+        options:
+          - CERT
+          - TEST
+          - PROD
+      replace:
+        description: Delete existing target items in target folder before clone
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: Log actions only (no clone)
+        required: false
+        type: boolean
+        default: true
+      allow_nonlinear:
+        description: Emergency only — skip linear DEV→CERT→TEST→PROD check
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.to_env == 'PROD' && 'agol-prod' || 'agol-promote' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r agol_promote/requirements.txt
+
+      - name: Run promotion
+        env:
+          AGOL_URL: ${{ secrets.AGOL_URL }}
+          AGOL_CLIENT_ID: ${{ secrets.AGOL_CLIENT_ID }}
+          AGOL_REFRESH_TOKEN: ${{ secrets.AGOL_REFRESH_TOKEN }}
+          # Optional named user (if not using OAuth):
+          # AGOL_USERNAME: ${{ secrets.AGOL_USERNAME }}
+          # AGOL_PASSWORD: ${{ secrets.AGOL_PASSWORD }}
+        run: |
+          cd agol_promote
+          FLAGS="--project ${{ github.event.inputs.project }} --from ${{ github.event.inputs.from_env }} --to ${{ github.event.inputs.to_env }}"
+          if [ "${{ github.event.inputs.replace }}" = "true" ]; then FLAGS="$FLAGS --replace"; fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
+          if [ "${{ github.event.inputs.allow_nonlinear }}" = "true" ]; then FLAGS="$FLAGS --allow-nonlinear"; fi
+          python promote.py $FLAGS

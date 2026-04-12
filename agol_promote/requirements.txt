@@ -1,0 +1,3 @@
+# ArcGIS API for Python — use a venv; version aligned with your ArcGIS Online org.
+arcgis>=2.3.0
+PyYAML>=6.0

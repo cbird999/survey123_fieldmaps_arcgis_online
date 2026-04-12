@@ -1,0 +1,3 @@
+# Install ArcGIS Pro's conda environment; arcpy is not pip-installable.
+# Use: conda activate arcgispro-py3  (or your Pro Python)
+# Then: pip install -e .
