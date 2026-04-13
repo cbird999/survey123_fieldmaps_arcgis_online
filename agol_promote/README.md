@@ -16,6 +16,8 @@ Example: prefix `VegQC`, env `DEV`, suffix `_FL` → `VegQC_DEV_FL`.
 
 Add a new program by copying a block under `projects:` and changing `title_prefix` / suffixes as needed.
 
+**Duplicate titles in one folder:** After publishing from Pro, ArcGIS Online may list both **Service Definition** and **Feature Layer Collection** with the same title (e.g. `VegQC_DEV_FL`). The promoter picks **Feature Layer Collection** (or **Feature Service**) for `feature_service` items and skips the service definition.
+
 ## CLI: `promote.py`
 
 ```bash

@@ -231,6 +231,8 @@ def _folder_entry_title(entry: Any) -> str | None:
 
 
 def _folder_titles(user: Any) -> set[str]:
+    if user is None:
+        return set()
     folders = user.folders or []
     return {t for f in folders if (t := _folder_entry_title(f))}
 
@@ -248,19 +250,137 @@ def _ensure_folder(gis: Any, owner_username: str, folder_name_str: str, dry_run:
 
 def _list_folder_items(user: Any, folder: str) -> list[Any]:
     try:
-        return list(user.items(folder=folder, max_items=2000))
+        return list(user.items(folder=folder, max_items=5000))
     except Exception as ex:
         logger.debug("Could not list folder %r: %s", folder, ex)
         return []
 
 
-def _find_item_in_folder(user: Any, folder: str, title: str) -> Any:
-    for item in _list_folder_items(user, folder):
-        if item.title == title:
-            return item
-    raise LookupError(
-        f"No item titled {title!r} in folder {folder!r} (owner {user.username!r})."
+def _item_type(it: Any) -> str:
+    return str(it.type or "")
+
+
+def _candidates_same_title(items: list[Any], title: str) -> tuple[list[Any], bool]:
+    """Return items matching title (exact first); bool True if case-insensitive fallback used."""
+    exact = [i for i in items if i.title == title]
+    if exact:
+        return exact, False
+    loose = [i for i in items if i.title.lower() == title.lower()]
+    if loose:
+        logger.warning(
+            "Matched title case-insensitively: expected %r; types=%s",
+            title,
+            [_item_type(i) for i in loose],
+        )
+        return loose, True
+    return [], False
+
+
+def _pick_item_for_spec_kind(candidates: list[Any], item_kind: str, title: str) -> Any | None:
+    """
+    Same AGOL title is often used for Service Definition + Feature Layer Collection after publishing.
+    Promote the hosted layer item, not the .sd companion.
+    """
+    if not candidates:
+        return None
+    if item_kind == "web_map":
+        for it in candidates:
+            if _item_type(it) == "Web Map":
+                return it
+        return None
+    if item_kind == "feature_service":
+        skip_types = {
+            "Service Definition",
+            "File Geodatabase",
+            "Shapefile",
+            "CSV",
+            "Microsoft Excel",
+        }
+        usable = [it for it in candidates if _item_type(it) not in skip_types]
+        for preferred in ("Feature Layer Collection", "Feature Service"):
+            for it in usable:
+                if _item_type(it) == preferred:
+                    if len(candidates) > 1:
+                        logger.info(
+                            "Selected %r for clone: type=%s id=%s (same title also on other item types)",
+                            title,
+                            _item_type(it),
+                            it.id,
+                        )
+                    return it
+        for it in usable:
+            if _is_feature_service_item(it):
+                return it
+        return None
+    return candidates[0]
+
+
+def _find_item_in_folder(
+    user: Any,
+    folder: str,
+    title: str,
+    *,
+    item_kind: str,
+    gis: Any | None = None,
+    owner_username: str | None = None,
+) -> Any:
+    items = _list_folder_items(user, folder)
+    titles_found = sorted({i.title for i in items})
+
+    candidates, _ = _candidates_same_title(items, title)
+    chosen = _pick_item_for_spec_kind(candidates, item_kind, title)
+    if chosen is not None:
+        return chosen
+    if candidates:
+        raise LookupError(
+            f"No suitable {item_kind!r} item titled {title!r} in folder {folder!r} "
+            f"(owner {user.username!r}). Same title exists with types: "
+            f"{[_item_type(i) for i in candidates]}. "
+            "Expected e.g. Feature Layer Collection for feature_service, Web Map for web_map."
+        )
+
+    if gis is not None and owner_username:
+        try:
+            q = f"title:{title} owner:{owner_username}"
+            searched = list(gis.content.search(query=q, max_items=100))
+        except Exception as ex:
+            logger.debug("content.search fallback failed: %s", ex)
+            searched = []
+        search_cands = [
+            it
+            for it in searched
+            if (it.title == title or it.title.lower() == title.lower())
+            and (
+                (o := getattr(it, "owner", None)) == owner_username
+                or (o and o.lower() == owner_username.lower())
+            )
+        ]
+        chosen = _pick_item_for_spec_kind(search_cands, item_kind, title)
+        if chosen is not None:
+            logger.warning(
+                "Found %r via content.search (folder listing missed or order differed); id=%s type=%s",
+                title,
+                chosen.id,
+                _item_type(chosen),
+            )
+            return chosen
+
+    hint = (
+        f"No item titled {title!r} in folder {folder!r} (owner {user.username!r}). "
+        f"Found {len(titles_found)} item(s) in that folder"
     )
+    if titles_found:
+        preview = titles_found[:50]
+        hint += f" with title(s): {preview}"
+        if len(titles_found) > 50:
+            hint += " ..."
+    else:
+        hint += (
+            " (folder empty or not visible with this token). "
+            "Confirm AGOL_CONTENT_OWNER is the item owner username, "
+            "the service account can see that user’s content, and items are in that folder."
+        )
+    raise LookupError(hint)
 
 
 def _is_feature_service_item(item: Any) -> bool:
@@ -413,6 +533,11 @@ def run_promotion(
     logger.info("Using content owner (folder/items user): %s", owner)
 
     user = gis.users.get(owner)
+    if user is None:
+        raise ValueError(
+            f"No ArcGIS user found for {owner!r}. "
+            "Fix AGOL_CONTENT_OWNER (or --content-owner) to match an existing member username exactly."
+        )
 
     _ensure_folder(gis, owner, tgt_folder, dry_run)
 
@@ -428,7 +553,15 @@ def run_promotion(
             )
 
     source_items = [
-        _find_item_in_folder(user, src_folder, t) for t in source_titles
+        _find_item_in_folder(
+            user,
+            src_folder,
+            item_title(project, fe, spec),
+            item_kind=spec.kind,
+            gis=gis,
+            owner_username=owner,
+        )
+        for spec in ordered_specs
     ]
     for it, tit in zip(source_items, source_titles):
         logger.info("Source: %r (%s) type=%s", tit, it.id, it.type)
