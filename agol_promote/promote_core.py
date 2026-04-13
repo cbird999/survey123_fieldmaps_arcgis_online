@@ -219,9 +219,20 @@ def _resolve_owner_username(gis: Any, content_owner: str | None) -> str:
     )
 
 
+def _folder_entry_title(entry: Any) -> str | None:
+    """ArcGIS API may return dicts or Folder objects for user.folders."""
+    if entry is None:
+        return None
+    if isinstance(entry, dict):
+        t = entry.get("title")
+        return str(t).strip() if t else None
+    t = getattr(entry, "title", None)
+    return str(t).strip() if t else None
+
+
 def _folder_titles(user: Any) -> set[str]:
     folders = user.folders or []
-    return {f.get("title") for f in folders if f.get("title")}
+    return {t for f in folders if (t := _folder_entry_title(f))}
 
 
 def _ensure_folder(gis: Any, owner_username: str, folder_name_str: str, dry_run: bool) -> None:
