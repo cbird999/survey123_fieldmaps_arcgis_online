@@ -2,7 +2,7 @@
 """
 Promote ArcGIS Online items between environments (same org), config-driven.
 
-Linear default: only the next hop in promotion_chain is allowed (e.g. DEV→CERT→TEST→PROD).
+Linear default: only the next hop in promotion_chain is allowed (e.g. DEV->CERT->TEST->PROD).
 See projects.yaml and README.md.
 """
 
@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--allow-nonlinear",
         action="store_true",
-        help="Allow any env→env pair listed in promotion_chain (emergency use only).",
+        help="Allow any env-to-env pair listed in promotion_chain (emergency use only).",
     )
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")

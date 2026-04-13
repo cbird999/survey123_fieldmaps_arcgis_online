@@ -57,14 +57,13 @@ jobs:
       - name: Run promotion
         env:
           AGOL_URL: ${{ secrets.AGOL_URL }}
+          # Named user is tried before OAuth when both AGOL_USERNAME and AGOL_PASSWORD are set:
+          AGOL_USERNAME: ${{ secrets.AGOL_USERNAME }}
+          AGOL_PASSWORD: ${{ secrets.AGOL_PASSWORD }}
           AGOL_CLIENT_ID: ${{ secrets.AGOL_CLIENT_ID }}
           AGOL_CLIENT_SECRET: ${{ secrets.AGOL_CLIENT_SECRET }}
           AGOL_REFRESH_TOKEN: ${{ secrets.AGOL_REFRESH_TOKEN }}
-          # If gis.users.me is None in CI, set to the same username you used for OAuth (org\user or user):
           AGOL_CONTENT_OWNER: ${{ secrets.AGOL_CONTENT_OWNER }}
-          # Optional named user (if not using OAuth):
-          # AGOL_USERNAME: ${{ secrets.AGOL_USERNAME }}
-          # AGOL_PASSWORD: ${{ secrets.AGOL_PASSWORD }}
         run: |
           cd agol_promote
           FLAGS="--project ${{ github.event.inputs.project }} --from ${{ github.event.inputs.from_env }} --to ${{ github.event.inputs.to_env }}"

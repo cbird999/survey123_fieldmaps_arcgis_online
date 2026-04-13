@@ -46,13 +46,63 @@ python promote.py --project vegqc --from CERT --to TEST --replace
 
 ### Authentication
 
-- `AGOL_PROFILE` / `--profile`, or
-- **`AGOL_CLIENT_ID` + `AGOL_REFRESH_TOKEN`**, and for **CI / SAML / confidential apps** usually **`AGOL_CLIENT_SECRET`**, or
-- `AGOL_USERNAME` + `AGOL_PASSWORD`, optional `AGOL_URL`.
+Priority: **`AGOL_PROFILE`** / `--profile` → **`AGOL_USERNAME` + `AGOL_PASSWORD`** → **OAuth** (`AGOL_CLIENT_ID` + `AGOL_REFRESH_TOKEN` + optional `AGOL_CLIENT_SECRET`). Optional `AGOL_URL`.
+
+Use **username/password** for a quick CI setup when the account has no MFA (or Esri allows app passwords—rare). SAML-only orgs may still need OAuth.
 
 ### Legacy wrapper
 
 `promote_dev_to_cert.py` runs `promote.py --project vegqc --from DEV --to CERT` plus any extra flags you pass.
+
+## Local testing (same as CI)
+
+Use a **venv** with Python 3.9+ and install dependencies (no ArcGIS Pro required):
+
+```bash
+cd agol_promote
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Set the **same variables** you use in GitHub (PowerShell example):
+
+```powershell
+cd agol_promote
+.\.venv\Scripts\Activate.ps1
+
+$env:AGOL_URL = "https://www.arcgis.com"   # or https://YOURORG.maps.arcgis.com
+$env:AGOL_USERNAME = "<agol built-in username>"
+$env:AGOL_PASSWORD = "<password>"
+# Optional if not using password auth:
+# $env:AGOL_CLIENT_ID / AGOL_CLIENT_SECRET / AGOL_REFRESH_TOKEN
+$env:AGOL_CONTENT_OWNER = "cbird_gis"      # only if gis.users.me is None
+
+# No changes to AGOL (recommended first)
+python promote.py --project vegqc --from DEV --to CERT --dry-run -v
+
+# Real promote (omit --dry-run)
+# python promote.py --project vegqc --from DEV --to CERT
+```
+
+**Bash (macOS/Linux):**
+
+```bash
+cd agol_promote
+source .venv/bin/activate
+export AGOL_URL="https://www.arcgis.com"
+export AGOL_USERNAME="..."
+export AGOL_PASSWORD="..."
+export AGOL_CONTENT_OWNER="cbird_gis"
+python promote.py --project vegqc --from DEV --to CERT --dry-run -v
+```
+
+**Checks:**
+
+- **`--dry-run -v`** should connect, list source items, and **not** clone.
+- If local works but Actions fails, compare **env values** (especially `AGOL_URL`, `AGOL_CONTENT_OWNER`, and secrets pasted without extra newlines).
+
+**No OAuth yet:** you can still validate config with `python promote.py --project vegqc --from DEV --to CERT --dry-run` only if `GIS(profile=...)` works via `AGOL_PROFILE` after signing in with ArcGIS Pro’s Python once, or use username/password where MFA allows it.
 
 ## GitHub Actions
 
@@ -62,11 +112,11 @@ Workflow: **Actions → AGOL promote → Run workflow**.
    - **`agol-promote`**: used for runs where `to_env` is not `PROD` (e.g. CERT, TEST).
    - **`agol-prod`**: used when `to_env` is `PROD` — add **required reviewers** here.
 
-2. Add **repository** secrets (recommended), e.g.:
-   - `AGOL_CLIENT_ID`, `AGOL_REFRESH_TOKEN`
-   - **`AGOL_CLIENT_SECRET`** — required for many **confidential** OAuth apps and **SAML** orgs so the Python API can refresh tokens **without** opening a browser (GitHub Actions has no interactive login).
-   - Optional **`AGOL_CONTENT_OWNER`** — ArcGIS **username** if `gis.users.me` is `None` in CI (see troubleshooting below).
-   - Optional `AGOL_URL` — prefer `https://YOURORG.maps.arcgis.com` when `www.arcgis.com` leaves `users.me` unset.
+2. Add **repository** secrets (recommended). **Auth order:** saved profile (not used in Actions) → **`AGOL_USERNAME` + `AGOL_PASSWORD`** if both set → else OAuth (`AGOL_CLIENT_ID` + `AGOL_REFRESH_TOKEN` + usually `AGOL_CLIENT_SECRET`).
+
+   **Simplest CI path:** `AGOL_USERNAME`, `AGOL_PASSWORD` (built-in ArcGIS account; **MFA often breaks** this—use a non-MFA automation account if policy allows), plus optional `AGOL_URL`, `AGOL_CONTENT_OWNER`.
+
+   **OAuth path:** `AGOL_CLIENT_ID`, `AGOL_REFRESH_TOKEN`, **`AGOL_CLIENT_SECRET`** (for many SAML/confidential apps), optional **`AGOL_CONTENT_OWNER`** if `gis.users.me` is `None`, optional `AGOL_URL`.
 
 ### CI / OAuth troubleshooting
 
@@ -84,7 +134,7 @@ If you see **`gis.users.me is None`** / **`AttributeError: 'NoneType'... usernam
 - Add **`AGOL_CONTENT_OWNER`** with the **ArcGIS username** of the account that owns the OAuth token (often `user@ORG` or `org_username`).
 - Regenerate the refresh token using the **same** portal base URL you put in **`AGOL_URL`**.
 
-3. The workflow defaults **`dry_run: true`** so the first run is safe; uncheck **dry_run** when you want a real clone.
+4. The workflow defaults **`dry_run: true`** so the first run is safe; uncheck **dry_run** when you want a real clone.
 
 **Triggering TEST then PROD:** run the workflow twice with matching hops, for example:
 

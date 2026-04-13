@@ -125,6 +125,15 @@ def _connect_gis(profile: str | None, url: str) -> Any:
         logger.info("Connecting with ArcGIS profile: %s", prof)
         return GIS(profile=prof)
 
+    # Named user first when set (simplest for CI; MFA on the account may block this).
+    user = (os.environ.get("AGOL_USERNAME") or "").strip()
+    pw = os.environ.get("AGOL_PASSWORD")
+    if pw is not None:
+        pw = str(pw).strip()
+    if user and pw:
+        logger.info("Connecting as named user: %s", user)
+        return GIS(url, user, pw)
+
     cid = (os.environ.get("AGOL_CLIENT_ID") or "").strip()
     rt = (os.environ.get("AGOL_REFRESH_TOKEN") or "").strip()
     csec = (os.environ.get("AGOL_CLIENT_SECRET") or "").strip() or None
@@ -143,18 +152,10 @@ def _connect_gis(profile: str | None, url: str) -> Any:
             logger.info("Using client_secret for OAuth token exchange")
         return GIS(url, **gis_kw)
 
-    user = (os.environ.get("AGOL_USERNAME") or "").strip()
-    pw = os.environ.get("AGOL_PASSWORD")
-    if pw is not None:
-        pw = pw.strip()
-    if user and pw is not None and pw != "":
-        logger.info("Connecting as named user: %s", user)
-        return GIS(url, user, pw)
-
     raise ValueError(
-        "No credentials: set AGOL_PROFILE, or AGOL_CLIENT_ID+AGOL_REFRESH_TOKEN "
-        "(and usually AGOL_CLIENT_SECRET for CI), "
-        "or AGOL_USERNAME+AGOL_PASSWORD (optional: --profile, AGOL_URL)."
+        "No credentials: set AGOL_PROFILE, or AGOL_USERNAME+AGOL_PASSWORD, "
+        "or AGOL_CLIENT_ID+AGOL_REFRESH_TOKEN (+ AGOL_CLIENT_SECRET for many CI orgs). "
+        "Optional: AGOL_URL."
     )
 
 
